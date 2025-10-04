@@ -1,0 +1,44 @@
+{
+  "name": "BMW M5 F90 2019+",
+  "description": "Scraper config for BMW M5 (F90 generation) from 2019 onwards",
+  "make": "BMW",
+  "model": "M5",
+  "generation": "F90",
+  "year_from": 2019,
+  "year_to": null,
+  "sites": [
+    {
+      "name": "example_site",
+      "enabled": true,
+      "base_url": "https://example.com/cars",
+      "method": "GET",
+      "search_params": {
+        "make": "BMW",
+        "model": "M5",
+        "yearMin": 2019
+      },
+      "pagination": {
+        "type": "page_number",
+        "param_name": "page",
+        "start": 1,
+        "max_pages": 10
+      },
+      "selectors": {
+        "listing_container": ".car-listing",
+        "title": ".car-title",
+        "price": ".car-price",
+        "year": ".car-year",
+        "mileage": ".car-mileage",
+        "location": ".car-location",
+        "images": ".car-image img",
+        "link": "a.car-link"
+      }
+    }
+  ],
+  "filters": {
+    "min_price": 50000,
+    "max_price": 200000,
+    "exclude_keywords": ["salvage", "parts", "damaged"]
+  }
+}
+
