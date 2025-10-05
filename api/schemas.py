@@ -19,7 +19,16 @@ class CarAdResponse(BaseModel):
     model: Optional[str] = None
     mileage: Optional[int] = None
     location: Optional[str] = None
+    dealer_name: Optional[str] = None
+    dealer_type: Optional[str] = None
+    fuel_type: Optional[str] = None
+    transmission: Optional[str] = None
+    body_type: Optional[str] = None
+    color: Optional[str] = None
+    engine_power: Optional[int] = None
+    engine_displacement: Optional[float] = None
     image_urls: Optional[List[str]] = None
+    local_image_paths: Optional[List[str]] = None
     scraped_at: datetime
     is_active: bool
     is_processed: bool

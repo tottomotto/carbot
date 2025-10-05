@@ -86,6 +86,12 @@ class ScraperRunner:
                     print(f"Ad already exists: {ad_data['source_id']}")
                     continue
                 
+                # Download images if available
+                downloaded_images = []
+                if ad_data.get('image_urls'):
+                    from scraper.image_manager import download_and_link_images
+                    # We'll link images after saving the ad
+                
                 # Create new ad record
                 car_ad = CarAdRaw(
                     source_site=ad_data['source_site'],
@@ -100,12 +106,32 @@ class ScraperRunner:
                     model=ad_data.get('model'),
                     mileage=ad_data.get('mileage'),
                     location=ad_data.get('location'),
+                    dealer_name=ad_data.get('dealer_name'),
+                    dealer_type=ad_data.get('dealer_type'),
+                    fuel_type=ad_data.get('fuel_type'),
+                    transmission=ad_data.get('transmission'),
+                    body_type=ad_data.get('body_type'),
+                    color=ad_data.get('color'),
+                    engine_power=ad_data.get('engine_power'),
+                    engine_displacement=ad_data.get('engine_displacement'),
                     image_urls=ad_data.get('image_urls', []),
                     scraped_at=datetime.utcnow(),
                 )
                 
                 self.db.add(car_ad)
                 self.db.commit()
+                
+                # Download and link images after saving the ad
+                if ad_data.get('image_urls'):
+                    from scraper.image_manager import download_and_link_images
+                    downloaded_images = download_and_link_images(
+                        ad_data['image_urls'], 
+                        ad_data['source_id'], 
+                        car_ad.id, 
+                        self.db, 
+                        max_images=1
+                    )
+                
                 saved_count += 1
                 
             except Exception as e:

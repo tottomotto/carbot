@@ -30,8 +30,19 @@ class CarAdRaw(Base):
     mileage = Column(Integer)
     location = Column(String(255))
     
+    # Additional fields
+    dealer_name = Column(String(255))
+    dealer_type = Column(String(50))  # 'dealer', 'private', 'unknown'
+    fuel_type = Column(String(50))
+    transmission = Column(String(50))
+    body_type = Column(String(50))
+    color = Column(String(100))
+    engine_power = Column(Integer)  # horsepower
+    engine_displacement = Column(Float)  # liters
+    
     # Images
     image_urls = Column(JSON)  # List of image URLs
+    local_image_paths = Column(JSON)  # List of local image file paths
     
     # Metadata
     scraped_at = Column(DateTime, default=datetime.utcnow, nullable=False)

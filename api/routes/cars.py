@@ -30,7 +30,8 @@ async def list_car_ads(
     if year:
         query = query.filter(CarAdRaw.year == year)
     
-    ads = query.order_by(desc(CarAdRaw.scraped_at)).offset(skip).limit(limit).all()
+    # Order by scraped_at (newest first), then by id for consistent ordering
+    ads = query.order_by(desc(CarAdRaw.scraped_at), desc(CarAdRaw.id)).offset(skip).limit(limit).all()
     return ads
 
 

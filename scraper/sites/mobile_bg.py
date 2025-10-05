@@ -7,6 +7,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from config.settings import settings
+from scraper.intelligent_extractor import IntelligentFieldExtractor
 
 
 class MobileBgScraper:
@@ -23,6 +24,7 @@ class MobileBgScraper:
             'Upgrade-Insecure-Requests': '1',
         })
         self.base_url = "https://www.mobile.bg"
+        self.intelligent_extractor = IntelligentFieldExtractor()
     
     def _get_delay(self) -> float:
         """Get random delay between requests."""
@@ -32,7 +34,7 @@ class MobileBgScraper:
         )
     
     def scrape_listings_page(self, url: str) -> List[Dict[str, Any]]:
-        """Scrape car listings from a mobile.bg page."""
+        """Scrape car listings from a mobile.bg page using intelligent extraction."""
         print(f"Scraping: {url}")
         
         try:
@@ -42,40 +44,43 @@ class MobileBgScraper:
             soup = BeautifulSoup(response.content, 'html.parser')
             listings = []
             
-            # Find car listing containers
-            # Based on the HTML structure, listings appear to be in specific containers
-            listing_containers = soup.find_all('div', class_=re.compile(r'.*listing.*|.*car.*|.*ad.*'))
+            # Use intelligent extractor to analyze page structure
+            print("Analyzing page structure with intelligent extractor...")
+            potential_containers = self.intelligent_extractor.analyze_page_structure(soup)
             
-            # If no specific containers found, look for common patterns
-            if not listing_containers:
-                # Look for elements that might contain car info
-                listing_containers = soup.find_all('div', string=re.compile(r'BMW.*M5', re.I))
+            print(f"Found {len(potential_containers)} potential car listing containers")
             
-            # Alternative approach: look for price patterns
-            if not listing_containers:
-                price_elements = soup.find_all(text=re.compile(r'\d+\s*\d*\s*[лв|€|$]'))
-                for price_elem in price_elements:
-                    parent = price_elem.parent
-                    if parent and parent not in listing_containers:
-                        listing_containers.append(parent)
-            
-            print(f"Found {len(listing_containers)} potential listing containers")
-            
-            for i, container in enumerate(listing_containers[:20]):  # Limit to first 20
+            for i, container_info in enumerate(potential_containers[:15]):  # Limit to top 15
                 try:
-                    listing_data = self._extract_listing_data(container, url)
-                    if listing_data:
+                    element = container_info['element']
+                    fields = container_info['fields']
+                    score = container_info['score']
+                    
+                    print(f"  Container {i+1} (score: {score:.2f}): {len(fields)} fields found")
+                    
+                    # Extract complete listing using intelligent extractor
+                    listing_data = self.intelligent_extractor.extract_car_listing(element)
+                    
+                    # Set source information
+                    listing_data['source_site'] = 'mobile.bg'
+                    listing_data['source_url'] = url
+                    
+                    # Generate consistent source_id
+                    import hashlib
+                    text_content = element.get_text(strip=True)
+                    content_hash = hashlib.md5(text_content[:200].encode()).hexdigest()[:8]
+                    listing_data['source_id'] = f"mobile_bg_intelligent_{content_hash}"
+                    
+                    if listing_data and (listing_data.get('price') or listing_data.get('year') or 'BMW' in text_content):
                         listings.append(listing_data)
-                        print(f"  ✓ Extracted listing {i+1}: {listing_data.get('title', 'Unknown')[:50]}...")
+                        print(f"    ✓ Extracted: {listing_data.get('title', 'Unknown')[:50]}...")
+                        print(f"    Fields: {list(fields.keys())}")
+                    else:
+                        print(f"    ✗ Skipped: insufficient data")
+                        
                 except Exception as e:
-                    print(f"  ✗ Error extracting listing {i+1}: {e}")
+                    print(f"  ✗ Error extracting container {i+1}: {e}")
                     continue
-            
-            # If we didn't find much with containers, try a different approach
-            if len(listings) < 5:
-                print("Trying alternative extraction method...")
-                alternative_listings = self._extract_alternative(soup, url)
-                listings.extend(alternative_listings)
             
             print(f"Total listings extracted: {len(listings)}")
             return listings
@@ -103,6 +108,14 @@ class MobileBgScraper:
                 'model': 'M5',
                 'mileage': None,
                 'location': None,
+                'dealer_name': None,
+                'dealer_type': 'unknown',
+                'fuel_type': None,
+                'transmission': None,
+                'body_type': None,
+                'color': None,
+                'engine_power': None,
+                'engine_displacement': None,
                 'image_urls': [],
             }
             
@@ -165,14 +178,22 @@ class MobileBgScraper:
                 lines = [line.strip() for line in text_content.split('\n') if line.strip()]
                 for line in lines:
                     if 'BMW' in line and 'M5' in line and len(line) > 10:
-                        listing['title'] = line[:200]  # Limit title length
+                        listing['title'] = line
                         break
             
-            # If no title found, create a basic one
-            if not listing['title']:
-                year_str = f" {listing['year']}" if listing['year'] else ""
-                price_str = f" - {listing['price']} {listing['currency']}" if listing['price'] else ""
-                listing['title'] = f"BMW M5{year_str}{price_str}"[:200]
+            # Create a proper title if none found or if too long
+            if not listing['title'] or len(listing['title']) > 200:
+                # Create a clean, short title
+                if listing['year'] and listing['price']:
+                    listing['title'] = f"BMW M5 {listing['year']} - {listing['price']} {listing['currency']}"
+                elif listing['year']:
+                    listing['title'] = f"BMW M5 {listing['year']}"
+                else:
+                    listing['title'] = "BMW M5"
+            
+            # Final safety check - ensure title is not too long
+            if len(listing['title']) > 200:
+                listing['title'] = listing['title'][:200]
             
             # Look for location
             location_patterns = [
@@ -185,6 +206,69 @@ class MobileBgScraper:
                     listing['location'] = location_match.group(1) if location_match.groups() else location_match.group(0)
                     break
             
+            # Extract additional car specifications
+            # Fuel type
+            fuel_patterns = [r'Бензинов', r'Дизел', r'Хибрид', r'Електрически']
+            for pattern in fuel_patterns:
+                if re.search(pattern, text_content, re.I):
+                    listing['fuel_type'] = re.search(pattern, text_content, re.I).group(0)
+                    break
+            
+            # Transmission
+            if re.search(r'Автоматична', text_content, re.I):
+                listing['transmission'] = 'Автоматична'
+            elif re.search(r'Ръчна', text_content, re.I):
+                listing['transmission'] = 'Ръчна'
+            
+            # Body type
+            if re.search(r'Седан', text_content, re.I):
+                listing['body_type'] = 'Седан'
+            elif re.search(r'Купе', text_content, re.I):
+                listing['body_type'] = 'Купе'
+            elif re.search(r'Кабрио', text_content, re.I):
+                listing['body_type'] = 'Кабрио'
+            
+            # Color
+            color_patterns = [r'Черен', r'Бял', r'Син', r'Червен', r'Сребърен', r'Сив']
+            for pattern in color_patterns:
+                if re.search(pattern, text_content, re.I):
+                    listing['color'] = re.search(pattern, text_content, re.I).group(0)
+                    break
+            
+            # Engine power (к.с.)
+            power_match = re.search(r'(\d+)\s*к\.с\.', text_content)
+            if power_match:
+                try:
+                    listing['engine_power'] = int(power_match.group(1))
+                except ValueError:
+                    pass
+            
+            # Engine displacement (куб.см)
+            displacement_match = re.search(r'(\d+)\s*куб\.см', text_content)
+            if displacement_match:
+                try:
+                    displacement_cc = int(displacement_match.group(1))
+                    listing['engine_displacement'] = displacement_cc / 1000.0  # Convert to liters
+                except ValueError:
+                    pass
+            
+            # Dealer information
+            dealer_patterns = [
+                r'Дилър:\s*([^,\n]+)',
+                r'Автокъща:\s*([^,\n]+)',
+                r'Търговец:\s*([^,\n]+)',
+            ]
+            for pattern in dealer_patterns:
+                dealer_match = re.search(pattern, text_content, re.I)
+                if dealer_match:
+                    listing['dealer_name'] = dealer_match.group(1).strip()
+                    listing['dealer_type'] = 'dealer'
+                    break
+            
+            # Check for private seller indicators
+            if re.search(r'частно лице|частен|собствен', text_content, re.I):
+                listing['dealer_type'] = 'private'
+            
             # Extract images
             img_tags = container.find_all('img')
             for img in img_tags:
@@ -194,12 +278,44 @@ class MobileBgScraper:
                         src = 'https:' + src
                     elif src.startswith('/'):
                         src = urljoin(self.base_url, src)
-                    if src.startswith('http'):
+                    if src.startswith('http') and 'mobile.bg' in src:
                         listing['image_urls'].append(src)
             
-            # Generate source_id from content hash
-            content_hash = hash(text_content[:100])
-            listing['source_id'] = f"mobile_bg_{abs(content_hash)}"
+            # Generate consistent source_id from URL or specific content
+            # Try to find a unique identifier in the content first
+            source_id = None
+            
+            # Look for mobile.bg ad ID patterns (8+ digits)
+            ad_id_match = re.search(r'(\d{8,})', text_content)
+            if ad_id_match:
+                source_id = f"mobile_bg_{ad_id_match.group(1)}"
+            else:
+                # Look for other unique patterns in the content
+                # Try to find a consistent identifier from the content
+                import hashlib
+                
+                # Create a stable hash from key content
+                key_parts = []
+                if listing.get('title'):
+                    key_parts.append(listing['title'][:50])
+                if listing.get('price'):
+                    key_parts.append(str(listing['price']))
+                if listing.get('year'):
+                    key_parts.append(str(listing['year']))
+                if listing.get('mileage'):
+                    key_parts.append(str(listing['mileage']))
+                
+                if key_parts:
+                    key_content = '|'.join(key_parts)
+                    # Use MD5 for consistent hashing across sessions
+                    content_hash = hashlib.md5(key_content.encode()).hexdigest()[:8]
+                    source_id = f"mobile_bg_{content_hash}"
+                else:
+                    # Last resort: hash of first 100 chars
+                    content_hash = hashlib.md5(text_content[:100].encode()).hexdigest()[:8]
+                    source_id = f"mobile_bg_{content_hash}"
+            
+            listing['source_id'] = source_id
             
             # Only return if we have meaningful data
             if listing['price'] or listing['year'] or 'BMW M5' in text_content:
@@ -227,10 +343,15 @@ class MobileBgScraper:
                 # Get surrounding context
                 context = parent.get_text(strip=True)
                 
+                # Generate consistent source_id for alternative extraction
+                import hashlib
+                context_hash = hashlib.md5(context[:100].encode()).hexdigest()[:8]
+                alt_source_id = f"mobile_bg_alt_{i}_{context_hash}"
+                
                 # Create basic listing
                 listing = {
                     'source_site': 'mobile.bg',
-                    'source_id': f"mobile_bg_alt_{i}_{hash(context[:50])}",
+                    'source_id': alt_source_id,
                     'source_url': page_url,
                     'raw_data': {'text_content': context},
                     'title': f"BMW M5 - {context[:100]}",
