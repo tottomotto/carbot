@@ -56,11 +56,19 @@ class ScraperRunner:
     
     def _scrape_site(self, site_config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Scrape a specific site."""
-        # TODO: Implement site-specific scraping logic
-        # For now, return empty list as placeholder
-        print(f"  URL: {site_config.get('base_url')}")
+        site_name = site_config.get('name', 'unknown')
+        base_url = site_config.get('base_url')
+        
+        print(f"  URL: {base_url}")
         print(f"  Method: {site_config.get('method', 'GET')}")
-        return []
+        
+        # Import and use site-specific scrapers
+        if site_name == 'mobile_bg':
+            from scraper.sites.mobile_bg import scrape_mobile_bg_bmw_m5
+            return scrape_mobile_bg_bmw_m5(base_url)
+        else:
+            print(f"  ⚠️  No scraper implemented for site: {site_name}")
+            return []
     
     def save_to_db(self, ads: List[Dict[str, Any]]) -> int:
         """Save scraped ads to database."""

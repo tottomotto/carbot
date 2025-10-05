@@ -8,10 +8,11 @@
   "year_to": null,
   "sites": [
     {
-      "name": "example_site",
+      "name": "mobile_bg",
       "enabled": true,
-      "base_url": "https://example.com/cars",
+      "base_url": "https://www.mobile.bg/obiavi/avtomobili-dzhipove/bmw/m5/ot-2019",
       "method": "GET",
+      "scraper_class": "MobileBgScraper",
       "search_params": {
         "make": "BMW",
         "model": "M5",
@@ -21,17 +22,17 @@
         "type": "page_number",
         "param_name": "page",
         "start": 1,
-        "max_pages": 10
+        "max_pages": 5
       },
       "selectors": {
-        "listing_container": ".car-listing",
-        "title": ".car-title",
-        "price": ".car-price",
-        "year": ".car-year",
-        "mileage": ".car-mileage",
-        "location": ".car-location",
-        "images": ".car-image img",
-        "link": "a.car-link"
+        "listing_container": "div[class*='listing'], div[class*='car'], div[class*='ad']",
+        "title": "BMW M5",
+        "price": "\\d+\\s*\\d*\\s*[лв|€|$]",
+        "year": "20\\d{2}",
+        "mileage": "\\d+\\s*км",
+        "location": "гр\\.\\s*[^,\\n]+|София|Пловдив|Варна|Бургас",
+        "images": "img[src*='mobile.bg']",
+        "link": "a[href*='/obiavi/']"
       }
     }
   ],
