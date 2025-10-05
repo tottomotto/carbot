@@ -13,12 +13,13 @@ Added **8 new fields** to the scraper:
 - ✅ **Engine Power** - Horsepower (к.с.)
 - ✅ **Engine Displacement** - Converted from куб.см to liters
 
-### **2. Image Downloading System**
+### **2. Image Downloading & Enrichment**
 - ✅ **Image Downloader Class** - Downloads and stores car images locally
 - ✅ **Local Storage** - Images saved in `scraped_images/{source_id}/` folders
 - ✅ **Error Handling** - Graceful handling of failed downloads
 - ✅ **Content Validation** - Only downloads actual images
 - ✅ **Deduplication** - Skips already downloaded images
+ - ✅ **Color Inference** - Dominant color detected via OpenCV and persisted to DB (11 ads)
 
 ### **3. Beautiful Web Interface**
 - ✅ **Modern UI** - Clean, responsive design with gradients and cards
@@ -108,7 +109,7 @@ downloaded_images = download_car_images(ad_data['image_urls'], ad_data['source_i
 1. **Improve Image Extraction** - The current scrape didn't find many images
 2. **Add More Sites** - Scale to AutoTrader, Cars.com, etc.
 3. **Official Data Integration** - Fetch BMW M5 specs for enrichment
-4. **ML Image Analysis** - Use YOLO on downloaded images
+4. **ML Image Analysis** - Integrate YOLO; keep HSV fallback for color
 
 ### **Data Quality**
 - Some ads still missing prices (need better regex patterns)

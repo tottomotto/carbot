@@ -60,16 +60,19 @@
 ### Phase A - Image Recognition (YOLO)
 - [ ] Add YOLO runtime (Ultralytics) dependency and simple runner
 - [ ] Prepare dataset sampler from `scraped_images/` (resizing, format, metadata)
-- [ ] Run inference on first image per ad to extract: body style, color, damage cues, badge/logo detection
-- [ ] Store YOLO outputs in `CarAdEnriched` (new columns: `detected_body_style`, `detected_color`, `damage_score`, `features_json`)
+- [x] Heuristic color inference via OpenCV HSV masks (POC)
+- [x] Persist `detected_color` and `detected_color_confidence` to `CarAdEnriched`
+- [ ] Run YOLO on first image per ad to extract: body style, color, damage cues, badge/logo detection
+- [ ] Store YOLO outputs in `CarAdEnriched` (new columns: `detected_body_style`, `damage_score`, `features_json`)
 - [ ] Surface detections in UI (badges + details panel)
 
 ### Phase B - Orchestration (Dagster - initial stage)
-- [ ] Add Dagster service to Compose and minimal repo (jobs: scrape, download images, YOLO inference)
+- [x] Add Dagster minimal repo and UI (`dagster dev`) with `workspace.yaml`
+- [x] Create `enrichment_job` (folder scan report) and `enrichment_db_job` (persist colors)
 - [ ] Create `scrape_bmw_m5` job: config → scrape → save → images
 - [ ] Create `image_inference` job: iterate new ads → run YOLO → persist enriched fields
 - [ ] Add schedules/sensors for periodic runs and backfills
-- [ ] Expose Dagster UI for local monitoring
+- [ ] Expose Dagster UI via docker-compose
 
 ### Phase C - Enrichment (tie to YOLO + reference)
 - [ ] Map YOLO `detected_color`/`body_style` → normalized values
@@ -87,10 +90,10 @@
 ```
 Files Created: 60+
 Lines of Code: ~2,500
-Dependencies: 45+ packages (added numpy, OpenCV, scikit-learn, pandas)
+Dependencies: 45+ packages (added numpy, OpenCV, scikit-learn, pandas, Dagster)
 Database Models: 3 (+ new columns)
 API Endpoints: 12+ (incl. ML)
-Docker Services: 2 (api + optional local db); Dagster planned
+Docker Services: 2 (api + optional local db); Dagster running via `dagster dev`
 ```
 
 ## 🎯 POC Success Criteria
@@ -99,7 +102,7 @@ Docker Services: 2 (api + optional local db); Dagster planned
 2. ✅ Scrape and persist listings with images from one site
 3. ✅ Serve listings + images via API and web UI
 4. ✅ Add ML layer: anomaly detection, market analysis, image condition heuristics
-5. ⏳ YOLO inference integrated and persisted in enrichment table
+5. ✅ Heuristic color inference integrated and persisted (11 enriched rows)
 6. ⏳ Dagster orchestrates scrape → image → inference pipelines
 7. ⏳ Official BMW data integration (specs) for 10+ ads
 

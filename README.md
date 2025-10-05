@@ -18,6 +18,7 @@ This POC demonstrates the core functionality:
 - **Supabase (Postgres)** for database
 - **BeautifulSoup4** for web scraping
 - **Docker** for containerization
+- **Dagster** for orchestration (jobs, UI)
 
 ## Setup
 
@@ -64,6 +65,7 @@ carbot/
 ├── db/               # Database models and migrations
 ├── config/           # Configuration files
 ├── tests/            # Test suite
+├── orchestration/    # Dagster jobs and resources
 └── docs/             # Documentation
 ```
 
@@ -75,6 +77,14 @@ uv run pytest
 ```
 
 Format code:
+## Orchestration (Dagster)
+
+Run the Dagster UI and launch jobs:
+```bash
+dagster dev
+# In the UI, run `enrichment_job` (folder scan) or `enrichment_db_job` (persist colors)
+```
+
 ```bash
 uv run black .
 uv run ruff check .

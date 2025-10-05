@@ -44,6 +44,7 @@
 ### **Option 4: ML-Powered Features** 🤖
 **Goal**: Add AI capabilities to the POC
 - **Image analysis** (detect car condition, damage, modifications)
+- **Heuristic color detection** ✅ (OpenCV HSV) persisted to DB via Dagster
 - **Price prediction** (ML model for fair market value)
 - **Anomaly detection** (suspicious listings, potential scams)
 - **Smart matching** (find similar cars across sites)

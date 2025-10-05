@@ -22,6 +22,8 @@ dependencies = [
     "numpy>=1.24.0",
     "scikit-learn>=1.3.0",
     "pandas>=2.0.0",
+    "dagster>=1.7.0",
+    "dagster-webserver>=1.7.0",
 ]
 
 [project.optional-dependencies]
@@ -38,7 +40,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["api", "config", "db", "scraper", "ml"]
+packages = ["api", "config", "db", "scraper", "ml", "orchestration"]
 
 [tool.black]
 line-length = 100

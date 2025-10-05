@@ -109,6 +109,7 @@ def extract_mobile_bg_images(soup):
 - ✅ **Ordering**: Consistent across all layers
 - ✅ **Scalability**: Ready for S3 and multiple sites
 - ✅ **Maintenance**: Automatic cleanup prevents storage bloat
+- ✅ **Image-based enrichment**: Dominant color inferred for 11 images and persisted to DB via Dagster
 
 ---
 

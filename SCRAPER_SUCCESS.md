@@ -28,9 +28,9 @@ From the API response, we can see:
 {
   "total_ads": 10,
   "active_ads": 10,
-  "processed_ads": 0,
-  "enriched_ads": 0,
-  "enrichment_rate": 0.0
+  "processed_ads": 11,
+  "enriched_ads": 11,
+  "enrichment_rate": 1.0
 }
 ```
 
@@ -73,7 +73,7 @@ From the API response, we can see:
 - **More sites:** Add AutoTrader, Cars.com, etc.
 - **More models:** Expand beyond BMW M5
 - **Real-time monitoring:** Track scraping success rates
-- **ML integration:** Use YOLO for image analysis
+- **ML integration (now partially in place):** Heuristic color detection persisted to DB via Dagster
 
 ## 🎯 POC Success Criteria - Status
 
