@@ -86,6 +86,9 @@ class CarAdEnriched(Base):
     # Features and options
     features = Column(JSON)  # List of features
     colors = Column(JSON)  # Exterior/interior colors
+    # ML detections
+    detected_color = Column(String(50))
+    detected_color_confidence = Column(Float)
     
     # Validation flags
     data_quality_score = Column(Float)  # 0-1 score

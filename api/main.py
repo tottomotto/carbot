@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from config.settings import settings
-from api.routes import cars, health
+from api.routes import cars, health, ml
 
 app = FastAPI(
     title="CarBot API",
@@ -33,12 +33,19 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, tags=["health"])
 app.include_router(cars.router, prefix="/api/v1/cars", tags=["cars"])
+app.include_router(ml.router, prefix="/api/v1/ml", tags=["ml"])
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Root endpoint - serves the web interface."""
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/ml", response_class=HTMLResponse)
+async def ml_dashboard(request: Request):
+    """ML Dashboard endpoint - serves the ML analytics interface."""
+    return templates.TemplateResponse("ml_dashboard.html", {"request": request})
 
 
 @app.get("/api")

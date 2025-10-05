@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarBot ML Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        .card h3 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #48bb78; }
+        .status-warning { background-color: #ed8936; }
+        .status-error { background-color: #f56565; }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .anomaly-item {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .anomaly-item.high-risk {
+            background: #fed7d7;
+            border-left-color: #e53e3e;
+        }
+
+        .anomaly-item.medium-risk {
+            background: #fef5e7;
+            border-left-color: #ed8936;
+        }
+
+        .anomaly-item.low-risk {
+            background: #f0fff4;
+            border-left-color: #48bb78;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .success {
+            background: #f0fff4;
+            color: #2f855a;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 15px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            background: rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 CarBot ML Dashboard</h1>
+            <p>AI-Powered Car Market Intelligence</p>
+        </div>
+
+        <div class="nav-links">
+            <a href="/">🏠 Car Listings</a>
+            <a href="/docs">📚 API Docs</a>
+            <a href="#" onclick="location.reload()">🔄 Refresh</a>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- ML Status Card -->
+            <div class="card">
+                <h3>🧠 ML Components Status</h3>
+                <div id="ml-status">
+                    <div class="loading">Loading ML status...</div>
+                </div>
+            </div>
+
+            <!-- Market Analysis Card -->
+            <div class="card">
+                <h3>📊 Market Analysis</h3>
+                <div id="market-analysis">
+                    <div class="loading">Loading market analysis...</div>
+                </div>
+                <button class="btn" onclick="loadMarketAnalysis()">🔄 Refresh Analysis</button>
+            </div>
+
+            <!-- Price Prediction Card -->
+            <div class="card">
+                <h3>💰 Price Prediction</h3>
+                <div id="price-prediction">
+                    <div class="loading">Loading price predictions...</div>
+                </div>
+                <button class="btn" onclick="trainPriceModel()">🎯 Train Model</button>
+            </div>
+
+            <!-- Anomaly Detection Card -->
+            <div class="card">
+                <h3>🚨 Anomaly Detection</h3>
+                <div id="anomaly-detection">
+                    <div class="loading">Loading anomaly detection...</div>
+                </div>
+                <button class="btn" onclick="detectAnomalies()">🔍 Scan for Anomalies</button>
+            </div>
+
+            <!-- Image Analysis Card -->
+            <div class="card">
+                <h3>🖼️ Image Analysis</h3>
+                <div id="image-analysis">
+                    <div class="loading">Loading image analysis...</div>
+                </div>
+                <button class="btn" onclick="analyzeImages()">🔍 Analyze Images</button>
+            </div>
+
+            <!-- Market Trends Chart -->
+            <div class="card">
+                <h3>📈 Market Trends</h3>
+                <div class="chart-container">
+                    <canvas id="marketChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let marketChart = null;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadMLStatus();
+            loadMarketAnalysis();
+            detectAnomalies();
+        });
+
+        // Load ML components status
+        async function loadMLStatus() {
+            try {
+                const response = await fetch('/api/v1/ml/ml-status');
+                const data = await response.json();
+                
+                const statusHtml = `
+                    <div class="metric">
+                        <span class="metric-label">
+                            <span class="status-indicator status-ready"></span>
+                            Image Analyzer
+                        </span>
+                        <span class="metric-value">Ready</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">
+                            <span class="status-indicator ${data.price_predictor.trained ? 'status-ready' : 'status-warning'}"></span>
+                            Price Predictor
+                        </span>
+                        <span class="metric-value">${data.price_predictor.trained ? 'Trained' : 'Needs Training'}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">
+                            <span class="status-indicator status-ready"></span>
+                            Anomaly Detector
+                        </span>
+                        <span class="metric-value">Ready</span>
+                    </div>
+                `;
+                
+                document.getElementById('ml-status').innerHTML = statusHtml;
+            } catch (error) {
+                document.getElementById('ml-status').innerHTML = `<div class="error">Error loading ML status: ${error.message}</div>`;
+            }
+        }
+
+        // Load market analysis
+        async function loadMarketAnalysis() {
+            try {
+                const response = await fetch('/api/v1/ml/market-analysis');
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('market-analysis').innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+                
+                const analysis = data.analysis;
+                const overview = analysis.market_overview;
+                
+                const analysisHtml = `
+                    <div class="metric">
+                        <span class="metric-label">Total Listings</span>
+                        <span class="metric-value">${overview.total_listings}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Average Price</span>
+                        <span class="metric-value">€${overview.average_price.toLocaleString()}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Median Price</span>
+                        <span class="metric-value">€${overview.median_price.toLocaleString()}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Price Range</span>
+                        <span class="metric-value">€${overview.price_range.min.toLocaleString()} - €${overview.price_range.max.toLocaleString()}</span>
+                    </div>
+                `;
+                
+                document.getElementById('market-analysis').innerHTML = analysisHtml;
+                
+                // Update chart
+                updateMarketChart(analysis);
+                
+            } catch (error) {
+                document.getElementById('market-analysis').innerHTML = `<div class="error">Error loading market analysis: ${error.message}</div>`;
+            }
+        }
+
+        // Update market chart
+        function updateMarketChart(analysis) {
+            const ctx = document.getElementById('marketChart').getContext('2d');
+            
+            if (marketChart) {
+                marketChart.destroy();
+            }
+            
+            const trends = analysis.price_trends;
+            const yearData = trends.by_year || {};
+            
+            const years = Object.keys(yearData).sort();
+            const prices = years.map(year => yearData[year].avg_price);
+            
+            marketChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: years,
+                    datasets: [{
+                        label: 'Average Price by Year',
+                        data: prices,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value) {
+                                    return '€' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Train price model
+        async function trainPriceModel() {
+            const button = event.target;
+            button.disabled = true;
+            button.textContent = 'Training...';
+            
+            try {
+                const response = await fetch('/api/v1/ml/train-price-model', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('price-prediction').innerHTML = `<div class="error">${data.error}</div>`;
+                } else {
+                    const result = data.training_result;
+                    const html = `
+                        <div class="success">Model trained successfully!</div>
+                        <div class="metric">
+                            <span class="metric-label">Training Samples</span>
+                            <span class="metric-value">${result.training_samples}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Test Samples</span>
+                            <span class="metric-value">${result.test_samples}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Mean Absolute Error</span>
+                            <span class="metric-value">€${result.mae.toLocaleString()}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">R² Score</span>
+                            <span class="metric-value">${(result.r2_score * 100).toFixed(1)}%</span>
+                        </div>
+                    `;
+                    document.getElementById('price-prediction').innerHTML = html;
+                }
+            } catch (error) {
+                document.getElementById('price-prediction').innerHTML = `<div class="error">Error training model: ${error.message}</div>`;
+            } finally {
+                button.disabled = false;
+                button.textContent = '🎯 Train Model';
+            }
+        }
+
+        // Detect anomalies
+        async function detectAnomalies() {
+            try {
+                const response = await fetch('/api/v1/ml/detect-anomalies');
+                const data = await response.json();
+                
+                if (data.anomalies_detected === 0) {
+                    document.getElementById('anomaly-detection').innerHTML = `
+                        <div class="success">✅ No anomalies detected in ${data.total_listings_analyzed} listings</div>
+                    `;
+                    return;
+                }
+                
+                const summary = data.summary;
+                const anomalies = data.anomalies.slice(0, 5); // Show top 5
+                
+                let anomaliesHtml = `
+                    <div class="metric">
+                        <span class="metric-label">Anomalies Detected</span>
+                        <span class="metric-value">${data.anomalies_detected}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Risk Level</span>
+                        <span class="metric-value" style="color: ${summary.risk_level === 'high' ? '#e53e3e' : summary.risk_level === 'medium' ? '#ed8936' : '#48bb78'}">
+                            ${summary.risk_level.toUpperCase()}
+                        </span>
+                    </div>
+                `;
+                
+                anomalies.forEach(anomaly => {
+                    const riskClass = anomaly.anomaly_score > 0.5 ? 'high-risk' : anomaly.anomaly_score > 0.3 ? 'medium-risk' : 'low-risk';
+                    anomaliesHtml += `
+                        <div class="anomaly-item ${riskClass}">
+                            <strong>Ad ${anomaly.ad_id}</strong> (${anomaly.source_id})<br>
+                            <small>${anomaly.anomaly_reasons.join(', ')}</small>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('anomaly-detection').innerHTML = anomaliesHtml;
+                
+            } catch (error) {
+                document.getElementById('anomaly-detection').innerHTML = `<div class="error">Error detecting anomalies: ${error.message}</div>`;
+            }
+        }
+
+        // Analyze images
+        async function analyzeImages() {
+            try {
+                // Get first few car ads with images
+                const response = await fetch('/api/v1/cars/?limit=5');
+                const cars = await response.json();
+                
+                const carsWithImages = cars.filter(car => car.local_image_paths && car.local_image_paths.length > 0);
+                
+                if (carsWithImages.length === 0) {
+                    document.getElementById('image-analysis').innerHTML = `
+                        <div class="error">No cars with local images found. Run scraper first to download images.</div>
+                    `;
+                    return;
+                }
+                
+                let analysisHtml = `<div class="success">Found ${carsWithImages.length} cars with images</div>`;
+                
+                // Analyze first car's image
+                const firstCar = carsWithImages[0];
+                const imageResponse = await fetch(`/api/v1/ml/analyze-image/${firstCar.id}`);
+                const imageData = await imageResponse.json();
+                
+                if (imageData.analysis) {
+                    const analysis = imageData.analysis;
+                    analysisHtml += `
+                        <div class="metric">
+                            <span class="metric-label">Overall Condition</span>
+                            <span class="metric-value">${analysis.overall_condition}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Image Quality</span>
+                            <span class="metric-value">${(analysis.image_quality.score * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Damage Level</span>
+                            <span class="metric-value">${(analysis.damage_detection.damage_level * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Dominant Color</span>
+                            <span class="metric-value">${analysis.feature_extraction.color}</span>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('image-analysis').innerHTML = analysisHtml;
+                
+            } catch (error) {
+                document.getElementById('image-analysis').innerHTML = `<div class="error">Error analyzing images: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

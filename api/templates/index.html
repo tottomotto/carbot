@@ -146,6 +146,28 @@
             border-radius: 8px;
             margin-top: 15px;
         }
+        .anomaly-badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #c53030;
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            border-radius: 999px;
+            vertical-align: middle;
+        }
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .toolbar label {
+            color: #2c3e50;
+            font-size: 0.95rem;
+            user-select: none;
+        }
         
         .no-image {
             width: 100%;
@@ -206,7 +228,10 @@
         <div class="listings">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h2>Latest BMW M5 Listings</h2>
-                <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+                <div class="toolbar">
+                    <label><input type="checkbox" id="onlyAnomalies" onchange="loadListings()"> Show anomalies only</label>
+                    <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+                </div>
             </div>
             <div id="listings">
                 <div class="loading">Loading car listings...</div>
@@ -245,19 +270,27 @@
         
         async function loadListings() {
             try {
-                const response = await fetch('/api/v1/cars/?limit=10');
-                const listings = await response.json();
+                const [listingsRes, anomaliesRes] = await Promise.all([
+                    fetch('/api/v1/cars/?limit=10'),
+                    fetch('/api/v1/ml/detect-anomalies')
+                ]);
+                const listings = await listingsRes.json();
+                const anomaliesPayload = await anomaliesRes.json();
+                const anomalyIds = new Set((anomaliesPayload.anomalies || []).map(a => a.ad_id));
                 
                 if (listings.length === 0) {
                     document.getElementById('listings').innerHTML = '<div class="loading">No listings found</div>';
                     return;
                 }
                 
-                const listingsHTML = listings.map(car => `
+                const onlyAnomalies = document.getElementById('onlyAnomalies')?.checked;
+                const filtered = onlyAnomalies ? listings.filter(c => anomalyIds.has(c.id)) : listings;
+
+                const listingsHTML = filtered.map(car => `
                     <div class="car-card">
                         <div class="car-header">
                             <div>
-                                <div class="car-title">${car.title || 'BMW M5'}</div>
+                                <div class="car-title">${car.title || 'BMW M5'} ${anomalyIds.has(car.id) ? '<span class="anomaly-badge">ANOMALY</span>' : ''}</div>
                                 <div style="font-size: 0.9rem; color: #7f8c8d;">
                                     ${car.source_site} • ${new Date(car.scraped_at).toLocaleDateString()}
                                 </div>
@@ -287,7 +320,7 @@
                     </div>
                 `).join('');
                 
-                document.getElementById('listings').innerHTML = listingsHTML;
+                document.getElementById('listings').innerHTML = listingsHTML || '<div class="loading">No listings match the current filter</div>';
             } catch (error) {
                 document.getElementById('listings').innerHTML = '<div class="error">Error loading listings</div>';
             }
