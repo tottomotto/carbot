@@ -83,6 +83,7 @@ Run the Dagster UI and launch jobs:
 ```bash
 dagster dev
 # In the UI, run `enrichment_job` (folder scan) or `enrichment_db_job` (persist colors)
+# New: run `Create deduplicated YOLO dataset and Label Studio import` to build a training set
 ```
 
 ```bash

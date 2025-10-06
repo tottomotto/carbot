@@ -30,3 +30,15 @@ class DbSessionResource(ConfigurableResource):
 db_session_resource = DbSessionResource()
 
 
+
+class DatasetDirResource(ConfigurableResource):
+    """Provides the dataset output directory base path."""
+
+    path: str = str(Path("datasets"))
+
+    def __call__(self) -> str:
+        return self.path
+
+
+dataset_dir_resource = DatasetDirResource()
+

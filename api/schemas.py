@@ -42,6 +42,8 @@ class CarAdEnrichedResponse(BaseModel):
     
     id: int
     raw_ad_id: int
+    detected_color: Optional[str] = None
+    detected_color_confidence: Optional[float] = None
     canonical_make: Optional[str] = None
     canonical_model: Optional[str] = None
     generation: Optional[str] = None

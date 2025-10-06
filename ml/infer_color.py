@@ -17,66 +17,124 @@ SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
 def infer_dominant_color(image_path: str) -> Tuple[Optional[str], float]:
-    """Return (color_name, confidence 0..1) from image using HSV masks.
+    """Return (color_name, confidence 0..1) using foreground mask + k-means on HSV.
 
-    The heuristic counts pixels inside coarse HSV ranges for common car colors
-    and selects the color with the highest count. Confidence is the fraction of
-    pixels within the winning mask.
+    Steps:
+    1) Downscale for speed
+    2) Foreground segmentation via GrabCut (rect init)
+    3) K-means clustering on HSV of foreground pixels (k=3)
+    4) Map cluster centroids to coarse human colors; confidence = cluster share
+    Fallback: simple HSV range counting when segmentation/clustering fails.
     """
     img = cv2.imread(image_path)
     if img is None:
         return None, 0.0
 
-    # Resize to speed up processing on high-res images
     height, width = img.shape[:2]
-    scale = 256 / max(height, width)
+    scale = 320 / max(height, width)
     if scale < 1.0:
         img = cv2.resize(img, (int(width * scale), int(height * scale)))
 
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-    # H: 0..179, S: 0..255, V: 0..255
-    ranges: Dict[str, Tuple[Tuple[int, int, int], Tuple[int, int, int]]] = {
-        "black": ((0, 0, 0), (179, 60, 70)),
-        "white": ((0, 0, 200), (179, 40, 255)),
-        "gray": ((0, 0, 70), (179, 40, 200)),
-        "red": ((0, 80, 80), (10, 255, 255)),
-        "red2": ((170, 80, 80), (179, 255, 255)),  # wrap-around
-        "blue": ((100, 80, 80), (130, 255, 255)),
-        "green": ((40, 80, 80), (80, 255, 255)),
-        "yellow": ((20, 80, 80), (35, 255, 255)),
-        "brown": ((10, 80, 40), (20, 255, 180)),
-        "silver": ((0, 0, 140), (179, 30, 230)),
-    }
+    def fallback_ranges(hsv_img: np.ndarray) -> Tuple[Optional[str], float]:
+        ranges: Dict[str, Tuple[Tuple[int, int, int], Tuple[int, int, int]]] = {
+            "black": ((0, 0, 0), (179, 60, 70)),
+            "white": ((0, 0, 200), (179, 40, 255)),
+            "gray": ((0, 0, 70), (179, 40, 200)),
+            "red": ((0, 80, 80), (10, 255, 255)),
+            "red2": ((170, 80, 80), (179, 255, 255)),
+            "blue": ((100, 80, 80), (130, 255, 255)),
+            "green": ((40, 80, 80), (80, 255, 255)),
+            "yellow": ((20, 80, 80), (35, 255, 255)),
+            "brown": ((10, 80, 40), (20, 255, 180)),
+            "silver": ((0, 0, 140), (179, 30, 230)),
+        }
+        counts: Dict[str, int] = {}
+        total_pixels = hsv_img.shape[0] * hsv_img.shape[1]
+        for name, (lo, hi) in ranges.items():
+            lo_arr = np.array(lo, dtype=np.uint8)
+            hi_arr = np.array(hi, dtype=np.uint8)
+            mask = cv2.inRange(hsv_img, lo_arr, hi_arr)
+            counts[name] = int(np.count_nonzero(mask))
+        if "red" in counts and "red2" in counts:
+            counts["red"] = counts["red"] + counts["red2"]
+            counts.pop("red2", None)
+        if total_pixels == 0 or not counts:
+            return None, 0.0
+        top_color = max(counts, key=counts.get)
+        conf = counts[top_color] / float(total_pixels)
+        conf = round(min(max(conf, 0.0), 1.0), 3)
+        if top_color == "silver" and conf < 0.05:
+            top_color = "gray"
+        return top_color, conf
 
-    counts: Dict[str, int] = {}
-    total_pixels = hsv.shape[0] * hsv.shape[1]
+    # Foreground segmentation via GrabCut (rectangular init)
+    try:
+        mask = np.zeros(img.shape[:2], np.uint8)
+        bgdModel = np.zeros((1, 65), np.float64)
+        fgdModel = np.zeros((1, 65), np.float64)
+        pad_h = int(img.shape[0] * 0.06)
+        pad_w = int(img.shape[1] * 0.06)
+        rect = (pad_w, pad_h, img.shape[1] - 2 * pad_w, img.shape[0] - 2 * pad_h)
+        cv2.grabCut(img, mask, rect, bgdModel, fgdModel, 3, cv2.GC_INIT_WITH_RECT)
+        fg_mask = np.where((mask == 1) | (mask == 3), 1, 0).astype("uint8")
+        # If foreground too small, fallback
+        if int(fg_mask.sum()) < (img.shape[0] * img.shape[1] * 0.05):
+            return fallback_ranges(hsv)
+        fg_pixels = hsv[fg_mask == 1]
+        # Downsample pixels for k-means speed
+        if fg_pixels.shape[0] > 5000:
+            idx = np.random.choice(fg_pixels.shape[0], 5000, replace=False)
+            fg_pixels = fg_pixels[idx]
 
-    for name, (lo, hi) in ranges.items():
-        lo_arr = np.array(lo, dtype=np.uint8)
-        hi_arr = np.array(hi, dtype=np.uint8)
-        mask = cv2.inRange(hsv, lo_arr, hi_arr)
-        counts[name] = int(np.count_nonzero(mask))
+        # K-means on HSV (convert to float32)
+        Z = fg_pixels.astype(np.float32)
+        K = 3
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
+        compactness, labels, centers = cv2.kmeans(Z, K, None, criteria, 3, cv2.KMEANS_PP_CENTERS)
+        labels = labels.flatten()
+        centers = centers.astype(np.float32)
 
-    # Combine wrap-around reds
-    if "red" in counts and "red2" in counts:
-        counts["red"] = counts["red"] + counts["red2"]
-        counts.pop("red2", None)
+        # Choose largest cluster
+        counts = np.bincount(labels, minlength=K)
+        top_cluster = int(np.argmax(counts))
+        center = centers[top_cluster]
+        cluster_share = counts[top_cluster] / float(counts.sum())
 
-    if total_pixels == 0 or not counts:
-        return None, 0.0
+        # Map HSV centroid to coarse color name
+        h, s, v = center.tolist()
+        color = _map_hsv_to_color(h, s, v)
+        conf = round(float(cluster_share), 3)
+        return color, conf
+    except Exception:
+        # Any failure falls back to range method
+        return fallback_ranges(hsv)
 
-    top_color = max(counts, key=counts.get)
-    confidence = counts[top_color] / float(total_pixels)
 
-    # Clamp and normalize
-    confidence = round(min(max(confidence, 0.0), 1.0), 3)
+def _map_hsv_to_color(h: float, s: float, v: float) -> str:
+    """Map HSV centroid to a coarse color name.
+    Priority order handles grayscale vs chromatic decisions first.
+    """
+    if v < 60:
+        return "black"
+    if s < 25 and v > 200:
+        return "white"
+    if s < 35:
+        # mid saturation → gray/silver by brightness
+        return "silver" if v > 170 else "gray"
 
-    # Normalize ambiguous low-confidence silver to gray
-    if top_color == "silver" and confidence < 0.05:
-        top_color = "gray"
+    # Chromatic mapping by hue
+    if (h <= 10) or (h >= 170):
+        return "red"
+    if 15 <= h <= 30:
+        return "yellow" if v > 120 else "brown"
+    if 35 <= h <= 85:
+        return "green"
+    if 90 <= h <= 140:
+        return "blue"
 
-    return top_color, confidence
+    return "gray"
 
 
 def iter_image_paths(root_dir: Path) -> Iterable[Path]:

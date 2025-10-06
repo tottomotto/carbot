@@ -69,7 +69,7 @@
 ### Phase B - Orchestration (Dagster - initial stage)
 - [x] Add Dagster minimal repo and UI (`dagster dev`) with `workspace.yaml`
 - [x] Create `enrichment_job` (folder scan report) and `enrichment_db_job` (persist colors)
-- [ ] Create `scrape_bmw_m5` job: config → scrape → save → images
+- [x] Create `targeted_scrape_job`: scrape config → save ads → download images → persist colors
 - [ ] Create `image_inference` job: iterate new ads → run YOLO → persist enriched fields
 - [ ] Add schedules/sensors for periodic runs and backfills
 - [ ] Expose Dagster UI via docker-compose

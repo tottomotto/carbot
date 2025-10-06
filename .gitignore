@@ -70,5 +70,5 @@ data/
 # Temporary files
 tmp/
 temp/
-.tmp_dagster_home_fc9sc9f0
+.tmp_dagster_home_*
 

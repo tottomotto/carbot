@@ -317,10 +317,41 @@
                              <div class="no-image" style="display:none;">No image available</div>` :
                             '<div class="no-image">No image available</div>'
                         }
+
+                        <div id="enriched-${car.id}" style="margin-top:12px;">
+                            <div class="detail-item"><span class="detail-label">Enriched:</span> <span>Loading...</span></div>
+                        </div>
                     </div>
                 `).join('');
                 
                 document.getElementById('listings').innerHTML = listingsHTML || '<div class="loading">No listings match the current filter</div>';
+
+                // Fetch enriched data for each listing and update UI
+                filtered.forEach(async (car) => {
+                    try {
+                        const enrRes = await fetch(`/api/v1/cars/${car.id}/enriched`);
+                        if (!enrRes.ok) {
+                            const el = document.getElementById(`enriched-${car.id}`);
+                            if (el) el.innerHTML = '';
+                            return;
+                        }
+                        const enr = await enrRes.json();
+                        const parts = [];
+                        if (enr.detected_color) {
+                            const conf = typeof enr.detected_color_confidence === 'number' ? ` (${(enr.detected_color_confidence*100).toFixed(0)}%)` : '';
+                            parts.push(`<span class="detail-item"><span class="detail-label">Detected color:</span> ${enr.detected_color}${conf}</span>`);
+                        }
+                        if (enr.body_type) {
+                            parts.push(`<span class="detail-item"><span class="detail-label">Body style:</span> ${enr.body_type}</span>`);
+                        }
+                        // Future enriched fields can be appended here
+                        const el = document.getElementById(`enriched-${car.id}`);
+                        if (el) el.innerHTML = parts.length ? parts.join('') : '';
+                    } catch (e) {
+                        const el = document.getElementById(`enriched-${car.id}`);
+                        if (el) el.innerHTML = '';
+                    }
+                });
             } catch (error) {
                 document.getElementById('listings').innerHTML = '<div class="error">Error loading listings</div>';
             }
