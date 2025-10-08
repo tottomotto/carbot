@@ -15,13 +15,13 @@ To build a scalable, configurable platform for scraping, enriching, deduplicatin
 - **Monorepo:** All code, configs, and assets in one repository.
 - **Containerized:** Each service Dockerized, orchestrated locally with Docker Compose.
 - **Scripts-first Orchestration:** Site-specific Playwright crawlers run as standalone scripts for reliability under bot detection; later wrapped as Dagster ops/jobs once flows stabilize.
-- **Database (Postgres/Supabase):** Ad and image metadata tracked via Supabase (Postgres), including image paths/URIs, source site, crawler status, labels, and model outputs.
-- **Object Storage (Local → S3):** Images stored locally for now; migrate to S3 soon (e.g., `s3://bucket/models/<dataset>/...`). Metadata always references canonical storage URIs.
+- **Database (Postgres/Supabase):** A normalized relational schema with canonical tables (`Manufacturer`, `Model`, `Variant`), a master record for each physical vehicle (`UniqueCar`), and tables for transactional data (`Ad`, `Image`).
+- **Object Storage (Checksum-based, Local → S3):** Images are stored using a content-addressable path derived from their checksum for automatic deduplication. Stored locally for now, with a clear path to S3 migration.
 - **Labeling Platform (Label Studio):** Human-in-the-loop annotation, with optional auto-label bootstrapping from ad metadata.
 - **Custom Vision Models:** Train our own models (YOLO11m/ViT or similar); prior YOLO baseline deemed insufficiently accurate.
 - **API (FastAPI):** Public, partner, and admin endpoints.
 - **Operational Dashboards:** Grafana/Prometheus for custom metrics and alerts; Dagster UI once jobs are formalized.
-- **Comprehensive Scrape Configurations & Official Data:** Supports highly-selective scraping for only specific makes/models/years. Official data gathered and used for cross-referencing.
+- **Comprehensive Scrape Configurations & Official Data:** Supports highly-selective scraping for specific makes/models/years. Official data is used to populate the canonical database tables.
 
 ***
 
@@ -68,7 +68,7 @@ car-platform-monorepo/
 │   └── schemas.py
 ├── db/
 │   ├── migrations/
-│   ├── schema.sql
+│   ├── schema.sql      # Illustrative, not authoritative. Migrations are the source of truth.
 │   └── seed_data.sql
 ├── monitoring/
 │   ├── grafana/
@@ -94,27 +94,24 @@ car-platform-monorepo/
 
 ## **Component & Flow Highlights**
 
-1. **Site-Specific Crawlers (Playwright, scripts-first)**
-   - Per-site Playwright scripts hardened against bot detection (headers, realistic delays, retries, IP hygiene).
-   - Two primary modes per site: Ads ingestion (structured metadata + images) and Training data accumulation (images with inferred labels from ad text/spec).
-   - Config-driven scope: make/model/year/region; resilient to layout changes via selectors and validations.
-2. **Official Data Sync**
-   - Fetches valid trims/options/features/colors from OEM sites/APIs/vehicle DBs.
-   - Updates canonical tables used in all enrichment.
-3. **Image & Metadata Enrichment**
-   - Custom-trained vision models extract car features. Start with YOLO11m/ViT; iterate beyond YOLO baseline due to accuracy constraints.
-   - Raw JSON merged with normalized, validated information.
-   - Enriched with official options/terminology.
-4. **Deduplication**
-   - Uses image and metadata similarity for high-accuracy duplicate detection.
-   - Maps logical cars (even if listed in multiple places).
-5. **Arbitrage & Analytics**
-   - Identifies outliers and opportunities based on enriched, deduped data.
-   - Simple views/exports for further analysis or automated action.
-6. **API & Dashboard**
+1.  **Site-Specific Crawlers (Ingestion)**
+    - Per-site Playwright scripts ingest raw ad data into the `ads` table. At this stage, the `unique_car_id` is `NULL`.
+    - Images are downloaded, checksummed, and saved to content-addressable storage. An `images` record is created linking the image to the ad.
+2.  **Canonical Data Sync (Reference Layer)**
+    - Jobs to fetch valid manufacturers, models, and variants from official sources (OEM sites, data APIs) to populate our canonical tables.
+3.  **Metadata Enrichment**
+    - A dedicated process parses raw text from `ads` (e.g., "F/S 2022 M5 Comp") and maps it to the canonical `variant_id` from our reference tables.
+4.  **Deduplication & Clustering**
+    - A similarity engine analyzes ads using VIN, image checksums, and other metadata to identify multiple listings for the same physical car.
+    - When a cluster of ads is identified, a master `unique_cars` record is created, and all associated `ads` are updated with the `unique_car_id`.
+5.  **Custom Vision Model Enrichment**
+    - Custom-trained vision models extract high-quality features (e.g., validated color, detected damage) from images.
+6.  **Arbitrage & Analytics**
+    - With a clean, deduplicated dataset of unique cars, we can accurately track price history, time on market, and identify investment opportunities.
+7.  **API & Dashboard**
    - FastAPI for user and partner programmatic access.
    - Internal admin endpoints for job/data management.
-7. **Monitoring**
+8. **Monitoring**
    - Scripts emit metrics/logs; Grafana dashboards for scraping health, ML ops, deduplication rates, system metrics.
    - Dagster UI comes later when scripts are wrapped into jobs.
 
@@ -122,18 +119,20 @@ car-platform-monorepo/
 
 ## **End-to-End Data Flow**
 
+The data lifecycle is a multi-step process from raw ingestion to actionable insight.
+
 ```plaintext
-[Scraping Trigger] → Scripts-first Crawler (Playwright: Scrape & Ingest)
-                    ↓
-Supabase (Metadata: image_path, model, status="raw")
-                    ↓
-Local FS → S3 Bucket soon (Images: e.g., s3://your-bucket/models/bmw_m5_f90/image_001.jpg)
-                    ↓
-Label Studio (Annotation Toolkit: Auto-label + Manual Review)
-                    ↓
-Supabase (Updated Metadata: annotations, confidence, status="labeled/cleaned")
-                    ↓
-Export to Training (e.g., YOLO11m/ViT datasets)
+[Scraping] → Ad Ingestion (raw text, unique_car_id=NULL)
+     ↓
+[Enrichment] → Map raw text to Canonical Variant ID
+     ↓
+[Deduplication] → Cluster Ads, Create UniqueCar, Link Ads
+     ↓
+[Labeling] → Label Studio (Annotate Images)
+     ↓
+[Training] → Train Custom Models (e.g., Color, Damage)
+     ↓
+[Analysis] → Query UniqueCar data for Arbitrage
 ```
 
 Notes:
@@ -147,14 +146,9 @@ Notes:
 
 Storage layout (local now → S3 near-term):
 
-- Local: `datasets/raw/<make>_<model>_<gen>/...` and `datasets/exports/...`
-- S3 (planned): `s3://<bucket>/datasets/raw/<make>_<model>_<gen>/...`
-- Canonical URIs stored in Supabase, e.g., `image_uri` as `file://...` or `s3://...`
-
-Supabase metadata (proposed fields):
-
-- ads: `id`, `source_site`, `source_url`, `title`, `price`, `currency`, `location`, `spec_json`, `created_at`
-- images: `id`, `ad_id`, `image_uri`, `checksum`, `width`, `height`, `status` (raw|labeled|cleaned), `labels_bootstrap` (from ad), `annotations` (Label Studio export ref), `model_predictions`, `created_at`, `updated_at`
+- **Primary Storage:** Images are stored in a content-addressable (checksum-based) path. e.g., `datasets/storage/ab/cd/abcdef123...jpg`. This path is immutable and guarantees deduplication.
+- **Working Directories:** For ML training or analysis, scripts will create temporary directories of symlinks to provide a clean, human-readable dataset for a specific task. e.g., `datasets/exports/bmw-m5-cs-color-v1/`.
+- **Canonical URIs:** The `images.image_uri` column in the database stores the canonical path (`file://...` or `s3://...`) to the file in primary storage.
 
 Label Studio conventions:
 
@@ -164,9 +158,9 @@ Label Studio conventions:
 
 Data quality and governance:
 
-- Enforce deterministic pathing and file checksums to avoid dupes
-- Periodic validation job compares Supabase metadata to storage and Label Studio exports
-- Migration utility updates `image_uri` from local to S3 and backfills missing fields
+- Enforce deterministic pathing and file checksums to avoid dupes.
+- Periodic validation jobs to ensure consistency between the database and file storage.
+- A dedicated migration utility will handle the future local-to-S3 storage migration.
 
 ## **Design Principles**
 
@@ -190,81 +184,53 @@ Data quality and governance:
 
 # Car Platform Agile Task List
 
-## **Phase 0: Repository & Setup**
-- [ ] Create repo, folder structure, and initial config placeholders
-- [ ] Write and commit blueprint, tasks, requirements, and design docs
+## **Phase 1: Scraper & Ingestion MVP**
+- [ ] Implement a Playwright crawler for a single site (e.g., `collecting-cars`).
+- [ ] The crawler should ingest raw ad data into the `ads` table.
+- [ ] Download images, calculate their checksums, and store them in the checksum-based directory structure.
+- [ ] Create `images` records with the correct checksum, URI, and a foreign key to the `ads` table.
 
 ***
 
-## **Phase 1: Site Crawler MVP (Scripts-First)**
-- [ ] Implement Playwright crawler per site (e.g., mobile.de, collecting-cars) with anti-bot hardening
-- [ ] Support two modes: Ads ingestion and Training data accumulation
-- [ ] Persist ad metadata to Supabase (status="raw", image_path URIs)
-- [ ] Download images to local filesystem with stable path scheme (future S3)
-- [ ] Minimal quality checks (nulls, missing images, broken pages)
-- [ ] Provide admin CLI or script triggers to run crawlers per site/model/year
+## **Phase 2: Canonical Data Layer**
+- [ ] Build scripts to populate the `manufacturers`, `models`, and `variants` tables from an official data source (e.g., a car data API or a curated file).
+- [ ] Seed the database with an initial set of canonical data (e.g., for BMW).
 
 ***
 
-## **Phase 2: Labeling Pipeline & Dataset Management**
-- [ ] Stand up Label Studio and create projects per dataset/model
-- [ ] Import tasks from Supabase metadata with weak labels from ads (when applicable)
-- [ ] Define labeling ontology consistent with training targets (bounding boxes/segmentation/classes)
-- [ ] Round-trip annotations back to Supabase (annotations, confidence, status)
-- [ ] Export labeled datasets in YOLO/COCO/VOC as needed
+## **Phase 3: Enrichment Pipeline**
+- [ ] Create a script that reads unprocessed `ads`.
+- [ ] Implement logic to parse the raw text fields (`raw_title`, `raw_model`, etc.).
+- [ ] Match the parsed text to the canonical data and update the `ads` record with the correct `variant_id`.
 
 ***
 
-## **Phase 3: Model Training & Evaluation**
-- [ ] Create training pipelines for YOLO11m/ViT using exported datasets
-- [ ] Implement experiment tracking and evaluation metrics (mAP, recall, precision)
-- [ ] Iterate on data quality and labeling to improve accuracy
-
-## **Phase 4: Official Data/Reference Layer**
-- [ ] Implement job to fetch valid trims/options/colors from at least one OEM/vehicle data API
-- [ ] Structure as canonical options DB/table
-- [ ] Add mapping logic to relate scraped metadata to official values
+## **Phase 4: Deduplication Pipeline**
+- [ ] Design a similarity scoring module based on image checksums and other metadata (VIN, mileage, location).
+- [ ] Implement a job that clusters similar `ads`.
+- [ ] For each new cluster, create a `unique_cars` record.
+- [ ] Update all `ads` in the cluster with the corresponding `unique_car_id`.
 
 ***
 
-## **Phase 5: Metadata Normalization & Enrichment**
-- [ ] Parse year, generation, trim, etc., from raw ads and images
-- [ ] Apply trained model outputs to enrich ads with high-detail features
-- [ ] Map to official terminology using reference data; populate raw → enriched with validation
+## **Phase 5: Labeling & Training Pipeline**
+- [ ] Stand up Label Studio and create a project for exterior color identification.
+- [ ] Write a script to query the database for all images of a specific variant (full coverage) and import them into Label Studio.
+- [ ] Create a training pipeline for a color detection model using exported datasets.
+- [ ] Round-trip annotations and model predictions back to the `images` table.
 
 ***
 
-## **Phase 6: Deduplication & Similarity**
-- [ ] Write textual and image similarity scoring modules
-- [ ] Implement deduplication job linking similar ads
-- [ ] Create mapping table for unique/logical vehicles
+## **Phase 6: API & Analytics**
+- [ ] Implement initial FastAPI endpoints to query `unique_cars` and their associated `ads` and `images`.
+- [ ] Develop basic price outlier detection on the clean, deduplicated `unique_cars` data.
 
 ***
 
-## **Phase 7: Arbitrage & Analytics**
-- [ ] Basic price outlier detection for enriched/unique vehicles
-- [ ] Simple reporting/export endpoint (CSV, JSON)
-- [ ] Notifications or data feed for arbitrage opportunities
-
-***
-
-## **Phase 8: API & Dashboards**
-- [ ] Implement FastAPI endpoints for B2C, B2B, and admin
-- [ ] Build Grafana dashboards for scraping stats, ML feature extraction, deduplication health
-- [ ] Integrate Dagster UI once scripts are wrapped as ops/jobs
-
-***
-
-## **Phase 9: Monitoring, Security, & Resilience**
-- [ ] Integrate Prometheus metrics into all services
-- [ ] Add error, health, and anomaly alerting
-- [ ] Implement retries, DLQ, fallback for all critical jobs
-- [ ] Secure API access, secrets, and DB connections
-
-## **Phase 10: Storage Migration to S3**
-- [ ] Migrate image storage from local FS to S3; validate URIs in Supabase
-- [ ] Backfill existing datasets and update Label Studio import paths
-- [ ] Add lifecycle policies and cost controls
+## **Phase 7: Dashboards, Monitoring & Scaling**
+- [ ] Build Grafana dashboards for scraping stats, enrichment/deduplication rates, and data quality.
+- [ ] Begin wrapping the core scripts (ingestion, enrichment, deduplication) into Dagster jobs for orchestration and monitoring.
+- [ ] Implement retries and error handling for all critical jobs.
 
 ***
 

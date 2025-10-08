@@ -4,6 +4,13 @@ import argparse
 from pathlib import Path
 from urllib.parse import urlparse
 import random
+import sys
+import json
+import hashlib
+import shutil
+from db import SessionLocal, Ad, Image
+from datetime import datetime, timezone
+
 
 def ensure_unique_path(path: Path) -> Path:
     """Return a unique file path by adding a numeric suffix if needed."""
@@ -252,145 +259,218 @@ def _download_via_new_tab(page, url: str, outpath: Path, referer: str) -> bool:
         pass
     return False
 
+def calculate_checksum(file_path):
+    """Calculates the SHA256 checksum of a file."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256.update(byte_block)
+    return sha256.hexdigest()
+
+def store_image(temp_path: Path, storage_root: Path) -> tuple[Path, str]:
+    """Calculates checksum and moves image to content-addressable storage."""
+    checksum = calculate_checksum(temp_path)
+    dest_dir = storage_root / checksum[:2] / checksum[2:4]
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    final_path = dest_dir / temp_path.name
+    shutil.move(temp_path, final_path)
+    return final_path, checksum
+
+def _scrape_structured_data(page) -> dict:
+    """Scrapes key structured data from the ad page."""
+    data = {}
+    try:
+        # Car Overview Section
+        overview_selector = 'h2:has-text("Car Overview") + ul'
+        overview_list = page.locator(overview_selector)
+        if overview_list.count() > 0:
+            items = overview_list.locator("li").all()
+            for item in items:
+                text = item.inner_text()
+                if not text:
+                    continue
+                # Simple pattern matching for now
+                if "miles" in text.lower() or "km" in text.lower():
+                    data["mileage"] = text
+                elif "rhd" in text.lower() or "lhd" in text.lower():
+                    data["drive"] = text
+                elif "automatic" in text.lower() or "manual" in text.lower():
+                    data["transmission"] = text
+                else:
+                    # Attempt to identify color vs. interior vs. engine
+                    # This is naive and can be improved with better selectors
+                    if "color" not in data:
+                        data["color"] = text
+                    elif "engine" not in data:
+                        data["engine"] = text
+
+        # Lot Overview Section for location
+        lot_selector = 'h2:has-text("Lot Overview") + ul'
+        lot_list = page.locator(lot_selector)
+        if lot_list.count() > 0:
+            # Location is typically the last item
+            location_item = lot_list.locator("li").last
+            if location_item and "United Kingdom" in location_item.inner_text(): # a bit specific
+                 data["location"] = location_item.inner_text()
+            elif lot_list.locator("li >> nth=-1"):
+                 data["location"] = lot_list.locator("li >> nth=-1").inner_text()
+
+
+    except Exception as e:
+        print(f"Could not parse all structured data: {e}")
+    
+    return data
+
 def main():
-    parser = argparse.ArgumentParser(description="CollectingCars image downloader (UI-driven)")
-    parser.add_argument("make", help="Vehicle make directory (e.g. 'bmw')")
-    parser.add_argument("variant", help="Model/variant directory (e.g. 'f90-lci-cs')")
+    parser = argparse.ArgumentParser(description="CollectingCars ad scraper")
+    parser.add_argument("url", help="Full URL of the CollectingCars listing to scrape.")
     parser.add_argument(
-        "--base-dir",
-        default="datasets",
-        help="Base directory to store images (default: 'datasets')",
+        "--storage-dir",
+        default="datasets/storage",
+        help="Base directory for content-addressable image storage (default: 'datasets/storage')",
     )
-    parser.add_argument(
-        "--url",
-        default="https://collectingcars.com/for-sale/2022-bmw-f90-m5-cs-4",
-        help="CollectingCars listing URL to scrape",
-    )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        default=True,
-        help="Run browser in headless mode",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=25,
-        help="Max number of gallery images to save via screenshots",
-    )
-    parser.add_argument(
-        "--delay-ms",
-        type=int,
-        default=1000,
-        help="Delay between slides (ms) to allow image to render",
-    )
+    parser.add_argument("--headless", action="store_true", default=True)
+    parser.add_argument("--limit", type=int, default=20, help="Max number of new images to save.")
+    parser.add_argument("--delay-ms", type=int, default=1000, help="Delay between slides (ms).")
     args = parser.parse_args()
 
-    output_dir = (Path(args.base_dir) if Path(args.base_dir).is_absolute() else Path.cwd() / args.base_dir) / args.make / args.variant
-    output_dir.mkdir(parents=True, exist_ok=True)
+    storage_root = Path(args.storage_dir)
+    storage_root.mkdir(parents=True, exist_ok=True)
+    temp_dir = storage_root / "temp"
+    temp_dir.mkdir(exist_ok=True)
 
-    # Wrap Playwright with stealth so new contexts/pages are auto-patched.
-    with Stealth().use_sync(sync_playwright()) as p:
-        browser = p.chromium.launch(headless=args.headless)
-        context = browser.new_context()
-        page = context.new_page()
-        page.goto(args.url, wait_until="domcontentloaded")
+    db = SessionLocal()
+    try:
+        with Stealth().use_sync(sync_playwright()) as p:
+            browser = p.chromium.launch(headless=args.headless)
+            page = browser.new_context().new_page()
+            page.goto(args.url, wait_until="domcontentloaded")
 
-        _accept_cookies(page)
-        page.wait_for_timeout(1000)
+            _accept_cookies(page)
+            page.wait_for_timeout(1000)
 
-        if not _open_first_gallery_item(page):
-            # If lightbox didn't open, fall back to scanning page without modal
-            pass
+            # --- Scrape all textual data first ---
+            title = page.title()
+            print(f"Scraping ad: {title}")
+            structured_data = _scrape_structured_data(page)
+            print(f"Scraped structured data: {structured_data}")
 
-        saved = 0
-        # Initialize last_url to the currently displayed image when gallery opens
-        cur_loc = _find_main_image_locator(page)
-        last_url = _get_element_current_src(page, cur_loc) if cur_loc else None
+            # --- Check for existing ad and decide whether to create or update ---
+            source_site = urlparse(args.url).netloc
+            source_id = Path(urlparse(args.url).path).name
+            ad_record = db.query(Ad).filter_by(source_site=source_site, source_id=source_id).first()
+            is_new_ad = False
 
-        while saved < args.limit:
-            img_loc = _find_main_image_locator(page)
-            if not img_loc:
-                break
+            if ad_record:
+                print(f"Found existing Ad record (ID: {ad_record.id}). Checking for updates...")
+                ad_record.raw_title = title
+                ad_record.raw_data = structured_data
+                ad_record.last_scraped_at = datetime.now(timezone.utc)
+            else:
+                is_new_ad = True
+                print("Creating new Ad record...")
+                ad_record = Ad(
+                    source_site=source_site,
+                    source_id=source_id,
+                    source_url=args.url,
+                    raw_title=title,
+                    raw_data=structured_data,
+                    is_active=True
+                )
+                db.add(ad_record)
+                db.flush()
 
-            # Ensure the image is fully loaded
-            try:
-                page.wait_for_timeout(args.delay_ms)
-                _wait_for_image_loaded(page, img_loc, timeout_ms=10000)
-                # Resolve the actual image URL that the browser is displaying
-                best_url = _get_element_current_src(page, img_loc)
-                if best_url:
-                    fname = _filename_from_url(best_url)
-                else:
-                    fname = f"image-{saved+1}.jpg"
-                if not fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                    fname += ".jpg"
-                outpath = ensure_unique_path(output_dir / fname)
+            if not _open_first_gallery_item(page):
+                print("Could not open gallery lightbox, will scan for images on page.")
 
-                did_save = False
-                # 1) Prefer the lightbox's download link if present
-                dl_href = _get_download_href(page)
-                resolved_dl = page.evaluate("(args) => args.u ? new URL(args.u, args.base).toString() : null", {"u": dl_href, "base": page.url}) if dl_href else None
-                # 2) Otherwise use the currentSrc URL
-                target_url = resolved_dl or best_url
+            new_images_to_commit = []
+            seen_urls = set()
+            
+            # Initialize last_url to the currently displayed image when gallery opens
+            cur_loc = _find_main_image_locator(page)
+            last_url = _get_element_current_src(page, cur_loc) if cur_loc else None
+            if last_url:
+                seen_urls.add(last_url)
 
-                if target_url:
-                    # Try opening in a new tab (helps with Cloudflare/anti-bot)
-                    if _download_via_new_tab(page, target_url, outpath, referer=args.url):
-                        print(f"Saved: {outpath}")
-                        saved += 1
-                        did_save = True
-                    else:
-                        # Fall back to API request in the same browser context
-                        try:
-                            resp = page.request.get(
-                                target_url,
-                                headers={
-                                    "Referer": args.url,
-                                    "User-Agent": page.evaluate("() => navigator.userAgent"),
-                                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-                                    "Accept-Language": "en-US,en;q=0.9",
-                                },
+            while len(new_images_to_commit) < args.limit:
+                img_loc = _find_main_image_locator(page)
+                if not img_loc:
+                    print("Could not find main image locator. Ending.")
+                    break
+
+                try:
+                    page.wait_for_timeout(args.delay_ms)
+                    _wait_for_image_loaded(page, img_loc, timeout_ms=10000)
+                    
+                    target_url = _get_element_current_src(page, img_loc)
+                    if not target_url or target_url in seen_urls:
+                        # If we've seen this URL or can't find one, try advancing.
+                        if not _click_next(page): break
+                        continue
+
+                    seen_urls.add(target_url)
+                    fname = _filename_from_url(target_url)
+                    if not fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                        fname += ".jpg"
+                    
+                    temp_path = ensure_unique_path(temp_dir / fname)
+                    
+                    if _download_via_new_tab(page, target_url, temp_path, referer=args.url):
+                        final_path, checksum = store_image(temp_path, storage_root)
+                        
+                        image_exists = db.query(Image.id).filter_by(checksum=checksum).first()
+                        if not image_exists:
+                            new_image = Image(
+                                ad_id=ad_record.id,
+                                image_uri=final_path.as_posix(),
+                                checksum=checksum,
+                                status='raw'
                             )
-                            if resp.ok:
-                                with open(outpath, "wb") as f:
-                                    f.write(resp.body())
-                                print(f"Saved: {outpath}")
-                                saved += 1
-                                did_save = True
-                            else:
-                                print(f"HTTP {resp.status} for {target_url}, falling back to screenshot")
-                        except Exception as e:
-                            print(f"Failed HTTP download for {target_url}: {e}")
+                            new_images_to_commit.append(new_image)
+                            print(f"Queued new image: {final_path.name} (checksum: {checksum[:10]}...)")
+                        else:
+                            print(f"Image exists (checksum: {checksum[:10]}...). Skipping.")
+                            # Clean up the redundant download
+                            final_path.unlink()
 
-                if not did_save:
-                    # Screenshot the element as a fallback
-                    img_loc.screenshot(path=str(outpath), type="jpeg", quality=95)
-                    print(f"Saved (screenshot): {outpath}")
-                    saved += 1
-            except Exception as e:
-                print(f"Failed to capture image {saved+1}: {e}")
+                    else:
+                        print(f"Failed to download image from {target_url}")
 
-            # Advance to next slide; if not possible, stop
-            if not _click_next(page):
-                break
+                except Exception as e:
+                    print(f"Error processing image: {e}")
 
-            # Wait for the next image to be different and fully loaded
-            if not _wait_for_new_image(page, last_url, timeout_ms=max(8000, args.delay_ms + 3000)):
-                # If not detected, still pause a bit as fallback
-                jitter = int(args.delay_ms * (0.8 + random.random()))
-                page.wait_for_timeout(jitter)
+                if not _click_next(page):
+                    print("Could not find next button. Ending.")
+                    break
+                
+                if not _wait_for_new_image(page, last_url, timeout_ms=max(8000, args.delay_ms + 3000)):
+                    page.wait_for_timeout(int(args.delay_ms * 1.5))
+                
+                next_img_loc = _find_main_image_locator(page)
+                if next_img_loc:
+                    last_url = _get_element_current_src(page, next_img_loc)
 
-            # Update last_url to the newly visible image
-            next_img_loc = _find_main_image_locator(page)
-            if next_img_loc:
-                last_url = _get_element_current_src(page, next_img_loc)
+            # --- Final Commit Logic ---
+            changes_made = db.is_modified(ad_record) or new_images_to_commit
 
-        print(f"Downloaded {saved} images to {output_dir}")
+            if new_images_to_commit:
+                db.add_all(new_images_to_commit)
 
-        if not args.headless:
-            input("Press Enter to exit...")
-        browser.close()
+            if is_new_ad and not new_images_to_commit:
+                db.rollback()
+                print("\nNo new images found for this new ad. No database changes were made.")
+            elif changes_made:
+                db.commit()
+                action = "Created" if is_new_ad else "Updated"
+                print(f"\nSUCCESS: {action} Ad record (ID: {ad_record.id}) and added {len(new_images_to_commit)} new images.")
+            else:
+                print("\nNo changes detected. Database is already up to date.")
+
+            browser.close()
+    finally:
+        db.close()
 
 if __name__ == "__main__":
+    project_root = Path(__file__).resolve().parents[1]
+    sys.path.append(str(project_root))
     main()
