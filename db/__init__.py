@@ -1,25 +1,18 @@
 """Database module."""
-from db.models import (
-    Base,
-    Manufacturer,
-    Model,
-    Variant,
-    UniqueCar,
-    Ad,
-    Image,
-)
-from db.database import engine, SessionLocal, get_db
+from .database import engine, SessionLocal, get_db
+from .models import Base, Brand, Model, Generation, Version, Spec, Image, Document
 
 __all__ = [
-    "Base",
-    "Manufacturer",
-    "Model",
-    "Variant",
-    "UniqueCar",
-    "Ad",
-    "Image",
     "engine",
     "SessionLocal",
     "get_db",
+    "Base",
+    "Brand",
+    "Model",
+    "Generation",
+    "Version",
+    "Spec",
+    "Image",
+    "Document",
 ]
 

@@ -1,139 +1,176 @@
 """Database models for the car platform."""
-from datetime import datetime
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    JSON,
-    Float,
-    Boolean,
-    Text,
-    ForeignKey,
-    CheckConstraint,
-    UniqueConstraint,
+    Column, Integer, String, Text, ForeignKey, REAL, JSON
 )
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 
 Base = declarative_base()
 
 
-class Manufacturer(Base):
-    """Canonical data for a car manufacturer."""
-    __tablename__ = "manufacturers"
+class Brand(Base):
+    __tablename__ = "brands"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(100), nullable=False, unique=True, index=True)
-    models = relationship("Model", back_populates="manufacturer")
+    name = Column(String(100), nullable=False, unique=True)
+    country = Column(String(50))
+    url = Column(Text)
+    models = relationship("Model", back_populates="brand", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Manufacturer(id={self.id}, name='{self.name}')>"
+        return f"<Brand(id={self.id}, name='{self.name}')>"
 
 
 class Model(Base):
-    """Canonical data for a car model."""
     __tablename__ = "models"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    manufacturer_id = Column(Integer, ForeignKey("manufacturers.id"), nullable=False)
-    name = Column(String(100), nullable=False, index=True)
-    manufacturer = relationship("Manufacturer", back_populates="models")
-    variants = relationship("Variant", back_populates="model")
-    __table_args__ = (UniqueConstraint("manufacturer_id", "name", name="uq_model_manufacturer_name"),)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    body_type = Column(String(50))
+    start_year = Column(Integer)
+    end_year = Column(Integer)
+    url = Column(Text)
+    brand = relationship("Brand", back_populates="models")
+    generations = relationship("Generation", back_populates="model", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Model(id={self.id}, name='{self.name}')>"
 
 
-class Variant(Base):
-    """Canonical data for a specific car variant."""
-    __tablename__ = "variants"
+class Generation(Base):
+    __tablename__ = "generations"
     id = Column(Integer, primary_key=True, autoincrement=True)
     model_id = Column(Integer, ForeignKey("models.id"), nullable=False)
-    name = Column(String(100), nullable=False, index=True)
+    code = Column(String(20))
+    gen_name = Column(String(100))
     start_year = Column(Integer)
     end_year = Column(Integer)
-    model = relationship("Model", back_populates="variants")
-    unique_cars = relationship("UniqueCar", back_populates="variant")
-    images = relationship("Image", back_populates="variant") # for generic variant images
-    __table_args__ = (UniqueConstraint("model_id", "name", name="uq_variant_model_name"),)
+    description = Column(Text)
+    url = Column(Text)
+    model = relationship("Model", back_populates="generations")
+    versions = relationship("Version", back_populates="generation", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="generation", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Variant(id={self.id}, name='{self.name}')>"
+        return f"<Generation(id={self.id}, code='{self.code}', name='{self.gen_name}')>"
 
 
-class UniqueCar(Base):
-    """Master record for a single, physical car, identified through deduplication."""
-    __tablename__ = "unique_cars"
+class Version(Base):
+    __tablename__ = "versions"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    variant_id = Column(Integer, ForeignKey("variants.id"), nullable=False)
-    vin = Column(String(17), unique=True, nullable=True, index=True)
-    first_seen_at = Column(DateTime, default=datetime.utcnow)
-    last_seen_at = Column(DateTime, default=datetime.utcnow)
-    status = Column(String(50), default="For Sale", index=True)
-    variant = relationship("Variant", back_populates="unique_cars")
-    ads = relationship("Ad", back_populates="unique_car")
-    images = relationship("Image", back_populates="unique_car") # for specific car images
+    generation_id = Column(Integer, ForeignKey("generations.id"), nullable=False)
+    version_name = Column(String(100))
+    production_years = Column(String(20))
+    engine_type = Column(String(50))
+    engine_details = Column(Text)
+    url = Column(Text)
+    generation = relationship("Generation", back_populates="versions")
+    spec = relationship("Spec", back_populates="version", uselist=False, cascade="all, delete-orphan")
+    images = relationship("Image", back_populates="version", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<UniqueCar(id={self.id}, variant_id={self.variant_id})>"
+        return f"<Version(id={self.id}, name='{self.version_name}')>"
 
 
-class Ad(Base):
-    """An advertisement for a car on a specific website."""
-    __tablename__ = "ads"
+class Spec(Base):
+    __tablename__ = "specs"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    unique_car_id = Column(Integer, ForeignKey("unique_cars.id"), nullable=True, index=True)
-    source_site = Column(String(100), nullable=False, index=True)
-    source_id = Column(String(255), nullable=False, index=True)
-    source_url = Column(Text, nullable=False, unique=True)
-    # Store raw text fields for later enrichment and validation
-    raw_title = Column(String(500))
-    raw_price = Column(Float)
-    raw_year = Column(Integer)
-    raw_make = Column(String(100))
-    raw_model = Column(String(100))
-    raw_location = Column(String(255))
-    raw_data = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_scraped_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    is_active = Column(Boolean, default=True)
-    unique_car = relationship("UniqueCar", back_populates="ads")
-    images = relationship("Image", back_populates="ad")
-    __table_args__ = (UniqueConstraint("source_site", "source_id", name="uq_ad_source"),)
-
-    def __repr__(self):
-        return f"<Ad(id={self.id}, source_site='{self.source_site}', source_id='{self.source_id}')>"
+    version_id = Column(Integer, ForeignKey("versions.id"), nullable=False, unique=True)
+    
+    # Engine - Basic
+    cylinders = Column(String(20))
+    displacement_cc = Column(Integer)  # Cubic centimeters
+    displacement_l = Column(REAL)      # Liters
+    
+    # Power - Multiple units
+    power_hp = Column(Integer)         # Horsepower (metric)
+    power_kw = Column(Integer)         # Kilowatts
+    power_bhp = Column(Integer)        # Brake horsepower
+    power_rpm = Column(Integer)        # RPM at max power
+    
+    # Torque - Multiple units
+    torque_nm = Column(Integer)        # Newton-meters
+    torque_lb_ft = Column(Integer)     # Pound-feet
+    torque_rpm_min = Column(Integer)   # Min RPM for max torque
+    torque_rpm_max = Column(Integer)   # Max RPM for max torque
+    
+    # Fuel
+    fuel_type = Column(String(20))
+    fuel_capacity_l = Column(REAL)     # Liters
+    fuel_capacity_gal = Column(REAL)   # Gallons (US)
+    
+    # Performance
+    top_speed_kph = Column(Integer)    # km/h
+    top_speed_mph = Column(Integer)    # mph
+    acceleration_0_100_kph = Column(REAL)  # seconds (0-100 km/h)
+    acceleration_0_60_mph = Column(REAL)   # seconds (0-60 mph)
+    
+    # Drivetrain
+    transmission = Column(String(50))
+    drive_type = Column(String(50))
+    
+    # Brakes & Tires
+    brake_type_front = Column(String(50))
+    brake_type_rear = Column(String(50))
+    tire_size_front = Column(String(50))
+    tire_size_rear = Column(String(50))
+    
+    # Dimensions
+    length_mm = Column(Integer)
+    length_in = Column(REAL)
+    width_mm = Column(Integer)
+    width_in = Column(REAL)
+    height_mm = Column(Integer)
+    height_in = Column(REAL)
+    wheelbase_mm = Column(Integer)
+    wheelbase_in = Column(REAL)
+    ground_clearance_mm = Column(Integer)
+    ground_clearance_in = Column(REAL)
+    
+    # Weight
+    unladen_weight_kg = Column(Integer)
+    unladen_weight_lbs = Column(Integer)
+    gross_weight_kg = Column(Integer)
+    gross_weight_lbs = Column(Integer)
+    
+    # Cargo
+    cargo_volume_l = Column(Integer)
+    cargo_volume_cuft = Column(REAL)
+    
+    # Aerodynamics & Handling
+    aerodynamics_cd = Column(REAL)
+    turning_circle_m = Column(REAL)
+    
+    # Fuel Economy
+    fuel_economy_city_l_100km = Column(REAL)
+    fuel_economy_city_mpg = Column(REAL)
+    fuel_economy_highway_l_100km = Column(REAL)
+    fuel_economy_highway_mpg = Column(REAL)
+    fuel_economy_combined_l_100km = Column(REAL)
+    fuel_economy_combined_mpg = Column(REAL)
+    
+    # Emissions
+    co2_emissions_g_km = Column(Integer)
+    
+    # Extra data (infotainment, features, unmapped specs)
+    extra = Column(JSONB)
+    
+    version = relationship("Version", back_populates="spec")
 
 
 class Image(Base):
-    """A universal repository for all images, regardless of source."""
     __tablename__ = "images"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    # Foreign keys to define the image's context
-    ad_id = Column(Integer, ForeignKey("ads.id"), nullable=True)
-    variant_id = Column(Integer, ForeignKey("variants.id"), nullable=True)
-    unique_car_id = Column(Integer, ForeignKey("unique_cars.id"), nullable=True)
-    
-    # Storage and metadata
-    image_uri = Column(String(1024), nullable=False, unique=True)
-    checksum = Column(String(64), nullable=False, unique=True, index=True)
-    status = Column(String(50), default="raw", index=True)
-    annotations = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
-    # Relationships
-    ad = relationship("Ad", back_populates="images")
-    variant = relationship("Variant", back_populates="images")
-    unique_car = relationship("UniqueCar", back_populates="images")
-    
-    __table_args__ = (
-        CheckConstraint(
-            "(ad_id IS NOT NULL)::integer + "
-            "(variant_id IS NOT NULL)::integer + "
-            "(unique_car_id IS NOT NULL)::integer = 1",
-            name="chk_image_source_exclusive"
-        ),
-    )
+    version_id = Column(Integer, ForeignKey("versions.id"), nullable=False)
+    url = Column(Text, nullable=False)
+    caption = Column(String(255))
+    version = relationship("Version", back_populates="images")
 
-    def __repr__(self):
-        return f"<Image(id={self.id}, uri='{self.image_uri}', status='{self.status}')>"
+
+class Document(Base):
+    __tablename__ = "documents"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    generation_id = Column(Integer, ForeignKey("generations.id"), nullable=False)
+    doc_type = Column(String(50))
+    url = Column(Text)
+    generation = relationship("Generation", back_populates="documents")
 

@@ -1,0 +1,144 @@
+{
+    "brands": [
+      {
+        "id": "bmw",
+        "name": "BMW",
+        "url": "https://www.autoevolution.com/bmw/",
+        "models": [
+          {
+            "id": "bmw-m5",
+            "name": "M5",
+            "url": "https://www.autoevolution.com/bmw/m5/",
+            "generations": [
+              {
+                "id": "bmw-m535i-e12-1979",
+                "name": "M535i (E12)",
+                "years": "1979-1981",
+                "url": "https://www.autoevolution.com/cars/bmw-m-535i-e12-1979.html",
+                "versions": []
+              },
+              {
+                "id": "bmw-m5-e28-1985",
+                "name": "M5 (E28)",
+                "years": "1985-1988",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-e28-1985.html",
+                "versions": []
+              },
+              {
+                "id": "bmw-m5-e34-1988",
+                "name": "M5 (E34)",
+                "years": "1988-1995",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-e34-1988.html",
+                "versions": [
+                  {
+                    "id": "bmw-m5-e34-3.5l",
+                    "name": "M5 E34 3.5L",
+                    "url": "https://www.autoevolution.com/cars/bmw-m5-e34-1988.html#aeng_bmw-m5-e34-1988-35l-5mt-316-hp"
+                  },
+                  {
+                    "id": "bmw-m5-e34-3.8l",
+                    "name": "M5 E34 3.8L",
+                    "url": "https://www.autoevolution.com/cars/bmw-m5-e34-1988.html#aeng_bmw-m5-e34-1988-38l-6mt-340-hp"
+                  }
+                ]
+              },
+              {
+                "id": "bmw-m5-e39-1998",
+                "name": "M5 (E39)",
+                "years": "1998-2004",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-e39-1998.html",
+                "versions": [
+                  {
+                    "id": "bmw-m5-e39-4.9l",
+                    "name": "M5 E39 4.9L",
+                    "url": "https://www.autoevolution.com/cars/bmw-m5-e39-1998.html#aeng_bmw-m5-e39-1998-49l-6mt-400-hp"
+                  }
+                ]
+              },
+              {
+                "id": "bmw-m5-e60-2005",
+                "name": "M5 (E60)",
+                "years": "2005-2010",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-e60-2005.html",
+                "versions": [
+                  {
+                    "id": "bmw-m5-e60-5.0l",
+                    "name": "M5 E60 5.0L",
+                    "url": "https://www.autoevolution.com/cars/bmw-m5-e60-2005.html#aeng_bmw-m5-e60-2005-50l-v10-7at-507-hp"
+                  }
+                ]
+              },
+              {
+                "id": "bmw-m5-f10-2011",
+                "name": "M5 (F10)",
+                "years": "2011-2013",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-f10-2011.html",
+                "versions": [
+                  {
+                    "id": "bmw-m5-f10-4.4l",
+                    "name": "M5 F10 4.4L",
+                    "url": "https://www.autoevolution.com/cars/bmw-m5-f10-2011.html#aeng_bmw-m5-f10-2011-44l-v8-7at-560-hp"
+                  }
+                ]
+              },
+              {
+                "id": "bmw-m5-f10-lci-2013",
+                "name": "M5 (F10 LCI)",
+                "years": "2013-2017",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-f10-lci-2013.html",
+                "versions": []
+              },
+              {
+                "id": "bmw-m5-f90-2017",
+                "name": "M5 (F90)",
+                "years": "2017-2020",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-f90-2017.html",
+                "versions": []
+              },
+              {
+                "id": "bmw-m5-competition-f90-2018",
+                "name": "M5 Competition (F90)",
+                "years": "2018-2020",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-competition-2018.html",
+                "versions": []
+              },
+              {
+                "id": "bmw-m5-competition-f90-lci-2020",
+                "name": "M5 Competition (F90 LCI)",
+                "years": "2020-2023",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-competition-2020.html",
+                "versions": []
+              },
+              {
+                "id": "bmw-m5-cs-f90-2021",
+                "name": "M5 CS (F90)",
+                "years": "2021-present",
+                "url": "https://www.autoevolution.com/cars/bmw-ms-cs-2021.html",
+                "versions": [
+                  {
+                    "id": "bmw-m5-cs-f90-4.4l",
+                    "name": "M5 CS F90 4.4L",
+                    "url": "https://www.autoevolution.com/cars/bmw-ms-cs-2021.html#aeng_bmw-ms-cs-2021-44l-v8-8at-635-hp"
+                  }
+                ]
+              },
+              {
+                "id": "bmw-m5-g90-2024",
+                "name": "M5 (G90 Plug-in Hybrid)",
+                "years": "2024-present",
+                "url": "https://www.autoevolution.com/cars/bmw-m5-2024.html",
+                "versions": [
+                  {
+                    "id": "bmw-m5-g90-hybrid",
+                    "name": "M5 G90 Hybrid AWD",
+                    "url": "https://www.autoevolution.com/cars/bmw-m5-2024.html#aeng_bmw-m5-2024-44l-xdrive-v8-8at-awd-727-hp"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+  

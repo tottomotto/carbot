@@ -72,3 +72,6 @@ tmp/
 temp/
 .tmp_dagster_home_*
 
+# Scraper cookies and session data
+scripts/autoevolution/cookies.json
+
