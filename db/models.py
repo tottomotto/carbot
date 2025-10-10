@@ -105,14 +105,14 @@ class Spec(Base):
     acceleration_0_60_mph = Column(REAL)   # seconds (0-60 mph)
     
     # Drivetrain
-    transmission = Column(String(50))
-    drive_type = Column(String(50))
+    transmission = Column(String(200))  # Increased from 50 to 200
+    drive_type = Column(String(100))     # Increased from 50 to 100
     
     # Brakes & Tires
-    brake_type_front = Column(String(50))
-    brake_type_rear = Column(String(50))
-    tire_size_front = Column(String(50))
-    tire_size_rear = Column(String(50))
+    brake_type_front = Column(String(150))  # Increased from 50 to 150
+    brake_type_rear = Column(String(150))   # Increased from 50 to 150
+    tire_size_front = Column(String(100))   # Increased from 50 to 100
+    tire_size_rear = Column(String(100))    # Increased from 50 to 100
     
     # Dimensions
     length_mm = Column(Integer)

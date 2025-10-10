@@ -4,7 +4,8 @@ A modular, production-ready web scraper for extracting comprehensive car specifi
 
 ## Features
 
-✅ **Persistent Cookie Management** - Saves and loads browser session state to avoid repeated consent prompts  
+✅ **Smart Cookie Management** - Automatically loads cookies from `cookies.json`, skips consent wait on subsequent runs  
+✅ **Fast Execution** - No waiting for consent banner when cookies exist (~3s time savings per page)  
 ✅ **Comprehensive Spec Extraction** - Captures 80+ spec fields across multiple categories  
 ✅ **Infotainment Features** - Detects Apple CarPlay, Android Auto, and other connectivity features  
 ✅ **Gallery Images** - Extracts and stores car images with captions  
@@ -144,11 +145,22 @@ brands
 
 ## Cookie Management
 
-The scraper uses Playwright's `storage_state` feature to persist cookies:
+The scraper uses Playwright's `storage_state` feature to persist cookies for efficient operation:
 
-1. **First Run**: Accepts cookie consent, saves to `cookies.json`
-2. **Subsequent Runs**: Loads cookies from file, no consent needed
-3. **Automatic**: Cookies are saved after each successful scrape
+1. **First Run**: 
+   - No `cookies.json` found
+   - Waits for cookie consent banner
+   - Accepts consent and saves cookies to file
+   
+2. **Subsequent Runs**: 
+   - Detects existing `cookies.json`
+   - Loads cookies automatically
+   - **Skips the 1-second consent wait** for faster scraping
+   - Only does a quick check (no waiting) in case banner appears unexpectedly
+   
+3. **Automatic Saving**: 
+   - Cookies are saved after each successful scrape
+   - Session state persists across runs
 
 ### Cookie File Location
 ```
@@ -156,6 +168,10 @@ scripts/autoevolution/cookies.json
 ```
 
 This file is automatically gitignored to prevent committing session data.
+
+### Performance Impact
+- **First run**: ~3 seconds (1s wait + 2s for consent handling)
+- **Subsequent runs**: ~0s (instant, no waiting)
 
 ## Spec Extraction Details
 
@@ -241,7 +257,8 @@ This will show:
 ## Performance
 
 - **Average scrape time**: 5-10 seconds per generation page
-- **Cookie persistence**: Saves ~2 seconds per run after first
+- **Cookie persistence**: Saves ~3 seconds per page after first run (no consent wait)
+- **Smart consent handling**: Instant check when cookies loaded, only waits on first run
 - **Database**: Uses connection pooling for efficiency
 - **Memory**: Minimal footprint, processes one version at a time
 
